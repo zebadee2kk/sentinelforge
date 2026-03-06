@@ -1,0 +1,73 @@
+server:
+  http_listen_port: 3200
+  log_level: info
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+    jaeger:
+      protocols:
+        thrift_http:
+          endpoint: 0.0.0.0:14268
+        grpc:
+          endpoint: 0.0.0.0:14250
+
+ingester:
+  max_block_duration: 5m
+  max_block_bytes: 1_000_000
+  complete_block_timeout: 10m
+
+compactor:
+  compaction:
+    block_retention: 48h
+    compacted_block_retention: 1h
+    compaction_window: 1h
+    max_compaction_objects: 1000000
+    max_block_bytes: 100_000_000
+    retention_concurrency: 10
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /tmp/tempo/traces
+    wal:
+      path: /tmp/tempo/wal
+    cache: memcached
+    memcached:
+      consistent_hash: true
+      host: localhost
+      service: memcached
+      timeout: 500ms
+
+querier:
+  frontend_worker:
+    frontend_address: localhost:9095
+
+query_frontend:
+  search:
+    max_duration: 0
+  trace_by_id:
+    query_timeout: 10s
+
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+      cluster: sentinelforge
+  storage:
+    path: /tmp/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+
+overrides:
+  per_tenant_override_config: /etc/tempo/overrides.yml
+  metrics_generator_processors:
+    - service-graphs
+    - span-metrics
