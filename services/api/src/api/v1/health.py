@@ -37,7 +37,7 @@ async def readiness_check(
     # Check database
     try:
         result = await db.execute(text("SELECT 1"))
-        await result.fetchone()
+        result.fetchone()
         checks["database"] = "healthy"
     except Exception as e:
         logger.error("Database health check failed", error=str(e))

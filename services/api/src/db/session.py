@@ -1,10 +1,23 @@
 """Database session management."""
 
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from src.core.config import settings
 
-# Convert postgres:// to postgresql+asyncpg://
-database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+
+def build_async_db_url(url: str) -> str:
+    """Convert database URL to asyncpg-compatible format."""
+    url = url.replace("postgresql://", "postgresql+asyncpg://")
+    url = url.replace("postgres://", "postgresql+asyncpg://")
+    parsed = urlparse(url)
+    query_params = parse_qs(parsed.query, keep_blank_values=True)
+    query_params.pop("sslmode", None)
+    new_query = urlencode({k: v[0] for k, v in query_params.items()})
+    new_parsed = parsed._replace(query=new_query)
+    return urlunparse(new_parsed)
+
+
+database_url = build_async_db_url(settings.DATABASE_URL)
 
 engine = create_async_engine(
     database_url,
