@@ -1,0 +1,211 @@
+# Cerbos Policy Examples for SentinelForge
+
+This file provides example Cerbos policies for controlling SentinelForge agent runs and tool usage.
+
+It assumes the SentinelForge Tool Gateway and Orchestrator send Cerbos requests with:
+
+- `principal`: information about the end user and the acting agent.
+- `resource`: information about the agent being run or the tool being invoked.
+- `actions`: one or more actions such as `run`, `invoke`, `read`, `write`.
+
+Refer to the Cerbos documentation for full schema details.
+
+## Policy Layout
+
+We define two resource kinds:
+
+- `agent`: an AI agent configured in SentinelForge.
+- `tool`: a logical tool exposed via the Tool Gateway.
+
+And three main policy files:
+
+- `resource_agent.yaml`: who can run which agents.
+- `resource_tool_read.yaml`: who can use which read-only tools.
+- `resource_tool_write.yaml`: who can use which write/admin tools.
+
+## resource_agent.yaml
+
+```yaml
+apiVersion: api.cerbos.dev/v1
+policyVersion: "2026-03-07"
+resourcePolicy:
+  resource: agent
+  version: "2026-03-07"
+  rules:
+    # Sandbox agents: any authenticated user can run
+    - actions: ["run"]
+      effect: EFFECT_ALLOW
+      roles: ["user", "developer", "admin", "security"]
+      condition:
+        match:
+          expr: request.resource.attr.trust_level == "sandbox"
+
+    # Restricted agents: developers and admins only
+    - actions: ["run"]
+      effect: EFFECT_ALLOW
+      roles: ["developer", "admin", "security"]
+      condition:
+        match:
+          expr: request.resource.attr.trust_level == "restricted"
+
+    # Privileged agents: admins and security only
+    - actions: ["run"]
+      effect: EFFECT_ALLOW
+      roles: ["admin", "security"]
+      condition:
+        match:
+          expr: request.resource.attr.trust_level == "privileged"
+
+    # Default deny for everything else
+    - actions: ["run"]
+      effect: EFFECT_DENY
+      roles: ["user", "developer", "admin", "security"]
+```
+
+### Expected attributes for `agent` resources
+
+When calling Cerbos for agent runs, the SentinelForge Orchestrator should send:
+
+```json
+{
+  "kind": "agent",
+  "id": "agent-uuid-or-name",
+  "attr": {
+    "trust_level": "sandbox" | "restricted" | "privileged",
+    "framework": "crewai" | "langgraph" | "openclaw" | "custom",
+    "owner_id": "user-id",
+    "name": "Researcher Agent"
+  }
+}
+```
+
+## resource_tool_read.yaml
+
+Read-only tools are safe enough for broader use but still controlled.
+
+```yaml
+apiVersion: api.cerbos.dev/v1
+policyVersion: "2026-03-07"
+resourcePolicy:
+  resource: tool
+  version: "2026-03-07"
+  rules:
+    # All authenticated users may invoke read-only tools via sandbox agents
+    - actions: ["invoke", "read"]
+      effect: EFFECT_ALLOW
+      roles: ["user", "developer", "admin", "security"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.permission == "read"
+              - expr: request.principal.attr.agent_trust_level == "sandbox"
+
+    # Developers and admins may use read-only tools from restricted agents
+    - actions: ["invoke", "read"]
+      effect: EFFECT_ALLOW
+      roles: ["developer", "admin", "security"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.permission == "read"
+              - expr: request.principal.attr.agent_trust_level == "restricted"
+
+    # Default deny
+    - actions: ["invoke", "read"]
+      effect: EFFECT_DENY
+      roles: ["user", "developer", "admin", "security"]
+```
+
+### Expected attributes for `tool` resources
+
+```json
+{
+  "kind": "tool",
+  "id": "github_read",
+  "attr": {
+    "category": "git",
+    "permission": "read",
+    "mcp_server": "github-mcp",
+    "risk_level": "low"
+  }
+}
+```
+
+### Expected attributes for `principal`
+
+```json
+{
+  "id": "user-id",
+  "roles": ["developer"],
+  "attr": {
+    "agent_id": "agent-id",
+    "agent_role": "Researcher",
+    "agent_trust_level": "sandbox",
+    "environment": "homelab"
+  }
+}
+```
+
+## resource_tool_write.yaml
+
+Write/admin tools are restricted to specific roles and trust levels, with optional flags for human approval.
+
+```yaml
+apiVersion: api.cerbos.dev/v1
+policyVersion: "2026-03-07"
+resourcePolicy:
+  resource: tool
+  version: "2026-03-07-write"
+  rules:
+    # Only developers, admins, and security can use write tools
+    - actions: ["invoke", "write"]
+      effect: EFFECT_ALLOW
+      roles: ["developer", "admin", "security"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.permission == "write"
+              - expr: request.principal.attr.agent_trust_level in ["restricted", "privileged"]
+              - expr: request.resource.attr.risk_level in ["medium", "low"]
+
+    # High-risk write tools (e.g., database changes) require admin or security role
+    - actions: ["invoke", "write"]
+      effect: EFFECT_ALLOW
+      roles: ["admin", "security"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.permission == "write"
+              - expr: request.resource.attr.risk_level == "high"
+
+    # Admin tools only for admins and security, privileged agents only
+    - actions: ["invoke", "admin"]
+      effect: EFFECT_ALLOW
+      roles: ["admin", "security"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.permission == "admin"
+              - expr: request.principal.attr.agent_trust_level == "privileged"
+
+    # Everything else is denied
+    - actions: ["invoke", "write", "admin"]
+      effect: EFFECT_DENY
+      roles: ["user", "developer", "admin", "security"]
+```
+
+## Using These Policies
+
+In the SentinelForge Tool Gateway, before executing a tool call:
+
+1. Build a `principal` object from the authenticated user and the acting agent.
+2. Build a `resource` object for the tool being invoked.
+3. Call Cerbos with `CHECK` for the appropriate actions.
+4. If Cerbos denies, block the tool call and log the decision in the audit log.
+
+These examples are a starting point; tune roles, trust levels, and attributes to match your environment and risk appetite.
