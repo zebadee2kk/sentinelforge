@@ -28,5 +28,5 @@ dependencies = [
     # Upgraded from 0.27.1 to be compatible with fastapi 0.115.x
     "uvicorn[standard]==0.30.6",
     # Pinned explicitly to fix Minerva timing attack (CVE-2024-31497) in ecdsa<0.19.0
-    "ecdsa>=0.19.0",
+    "ecdsa>=0.19.2",
 ]
