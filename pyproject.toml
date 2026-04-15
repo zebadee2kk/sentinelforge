@@ -20,8 +20,8 @@ dependencies = [
     "python-dotenv==1.0.1",
     # NOTE: python-jose has an unpatched CVE (algorithm confusion with ECDSA keys).
     # Migration to authlib or python-jwt is recommended for production use.
-    "python-jose[cryptography]==3.3.0",
-    "python-multipart==0.0.22",
+    "python-jose[cryptography]==3.4.0",
+    "python-multipart==0.0.26",
     "redis==5.0.2",
     "sqlalchemy==2.0.28",
     "structlog==24.1.0",
