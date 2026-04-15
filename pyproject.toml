@@ -21,12 +21,12 @@ dependencies = [
     # NOTE: python-jose has an unpatched CVE (algorithm confusion with ECDSA keys).
     # Migration to authlib or python-jwt is recommended for production use.
     "python-jose[cryptography]==3.3.0",
-    "python-multipart==0.0.22",
+    "python-multipart==0.0.26",
     "redis==5.0.2",
     "sqlalchemy==2.0.28",
     "structlog==24.1.0",
     # Upgraded from 0.27.1 to be compatible with fastapi 0.115.x
     "uvicorn[standard]==0.30.6",
     # Pinned explicitly to fix Minerva timing attack (CVE-2024-31497) in ecdsa<0.19.0
-    "ecdsa>=0.19.0",
+    "ecdsa>=0.19.2",
 ]
